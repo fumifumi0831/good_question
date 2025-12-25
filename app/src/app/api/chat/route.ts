@@ -21,10 +21,10 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "System prompt not found." }, { status: 404 });
         }
 
-        // Mentorモードの場合、弱点情報を注入（シナリオガチャの精度向上）
-        if (mode === "mentor" && userStats) {
-            const weakPointsStr = userStats.weakPoints && userStats.weakPoints.length > 0
-                ? userStats.weakPoints.join(", ")
+        if (mode === "mentor") {
+            const stats = userStats || {};
+            const weakPointsStr = (stats.weakPoints && Array.isArray(stats.weakPoints) && stats.weakPoints.length > 0)
+                ? stats.weakPoints.join(", ")
                 : "明確な弱点はまだ特定されていません。";
             systemPrompt = systemPrompt.replace("${WEAK_POINTS}", weakPointsStr);
         }

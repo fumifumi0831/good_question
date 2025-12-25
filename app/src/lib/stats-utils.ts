@@ -9,10 +9,12 @@ export async function getUserStats(): Promise<UserStats> {
 
     if (completedSessions.length === 0) {
         return {
+            key: 'singleton',
             totalSessions: 0,
             averageScore: 0,
             weakPoints: [],
-            scoreTrend: []
+            scoreTrend: [],
+            lastUpdated: Date.now()
         };
     }
 
@@ -34,10 +36,12 @@ export async function getUserStats(): Promise<UserStats> {
     const weakPoints = averageScore < 70 ? ["構造化力", "仮説の深さ"] : ["共感の継続"];
 
     return {
+        key: 'singleton',
         totalSessions: completedSessions.length,
         averageScore: Math.round(averageScore),
         weakPoints,
-        scoreTrend
+        scoreTrend,
+        lastUpdated: Date.now()
     };
 }
 

@@ -27,22 +27,29 @@ export default function TrainingPage() {
 
   useEffect(() => {
     const init = async () => {
-      const stats = await getUserStats();
-      setUserStats(stats);
+      try {
+        const stats = await getUserStats();
+        setUserStats(stats);
+      } catch (err) {
+        console.error("Failed to load user stats", err);
+      }
     };
     init();
   }, [view]);
 
-  // 評価が完了した際に統計を再取得する
+  // 評価後に最新の統計を反映
   useEffect(() => {
     if (evaluationResult) {
-      getUserStats().then(setUserStats);
+      getUserStats().then(setUserStats).catch(console.error);
     }
   }, [evaluationResult]);
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth"
+      });
     }
   }, [messages]);
 
@@ -64,8 +71,8 @@ export default function TrainingPage() {
           mode: "mentor",
           messages: [{ role: "user", content: "トレーニングを開始してください。" }],
           userStats: userStats ? {
-            weakPoints: userStats.weakPoints,
-            averageScore: userStats.averageScore
+            weakPoints: userStats.weakPoints || [],
+            averageScore: userStats.averageScore || 0
           } : null,
         }),
       });
@@ -382,7 +389,7 @@ export default function TrainingPage() {
         </div>
 
         <nav className="space-y-2 mb-10">
-          <button onClick={() => setView("training")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${(view as string) === "training" ? "bg-[var(--primary)]/10 text-[var(--primary)] font-bold" : "hover:bg-[var(--bg-accent)]"}`}>
+          <button onClick={() => setView("training")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${view === "training" ? "bg-[var(--primary)]/10 text-[var(--primary)] font-bold" : "hover:bg-[var(--bg-accent)]"}`}>
             <MessageSquare size={18} />
             <span>Interview</span>
           </button>
