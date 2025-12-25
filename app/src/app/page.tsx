@@ -209,6 +209,9 @@ export default function TrainingPage() {
       });
 
       const data = await res.json();
+      if (!data.content) {
+        throw new Error(data.error || "AIからの応答が空でした。");
+      }
       const reachabilityMatch = data.content.match(/真因到達度：(\d+)%/);
       const reachability = reachabilityMatch ? parseInt(reachabilityMatch[1], 10) : botReachability;
       if (reachabilityMatch) setBotReachability(reachability);
@@ -462,9 +465,23 @@ export default function TrainingPage() {
         )}
 
         <div className="p-10 bg-[var(--bg-deep)] border-t border-[var(--border)]">
-          <div className={`relative flex items-center bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl focus-within:border-[var(--primary)] transition-all ${(!session || isEvaluating) && "opacity-30 pointer-events-none"}`}>
-            <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSendMessage()} placeholder="質問を入力してください..." className="flex-1 bg-transparent border-none p-6 outline-none text-lg" />
-            <button onClick={handleSendMessage} disabled={isLoading} className="p-4 m-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] transition-all disabled:opacity-50"><Send size={24} /></button>
+          <div className={`relative flex items-end bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl focus-within:border-[var(--primary)] transition-all ${(!session || isEvaluating) && "opacity-30 pointer-events-none"}`}>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              placeholder="質問を入力してください... (Shift+Enterで改行)"
+              className="flex-1 bg-transparent border-none p-6 outline-none text-lg resize-none min-h-[60px] max-h-[200px]"
+              rows={1}
+            />
+            <button onClick={handleSendMessage} disabled={isLoading} className="p-4 m-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] transition-all disabled:opacity-50 h-fit">
+              <Send size={24} />
+            </button>
           </div>
         </div>
 

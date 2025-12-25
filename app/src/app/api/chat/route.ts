@@ -14,7 +14,9 @@ export async function POST(req: Request) {
     }
 
     try {
-        const { messages, mode, userStats } = await req.json();
+        const body = await req.json();
+        const { messages, mode, userStats } = body;
+        console.log(`[API Chat] Mode: ${mode}, Messages Count: ${messages?.length}`);
 
         let systemPrompt = await getPrompt(mode as PromptMode);
         if (!systemPrompt) {
@@ -27,6 +29,7 @@ export async function POST(req: Request) {
                 ? stats.weakPoints.join(", ")
                 : "明確な弱点はまだ特定されていません。";
             systemPrompt = systemPrompt.replace("${WEAK_POINTS}", weakPointsStr);
+            console.log(`[API Chat] Injected Weak Points: ${weakPointsStr}`);
         }
 
         const model = genAI.getGenerativeModel({
@@ -34,12 +37,13 @@ export async function POST(req: Request) {
             systemInstruction: systemPrompt,
         });
 
-        // For simplicity, we convert messages to Gemini format
-        // Gemini roles: 'user', 'model' (assistant)
-        const history = messages.slice(0, -1).map((m: any) => ({
-            role: m.role === "assistant" ? "model" : "user",
-            parts: [{ text: m.content }],
-        }));
+        // Calculate history (messages except the last one)
+        const history = (messages && messages.length > 1)
+            ? messages.slice(0, -1).map((m: any) => ({
+                role: m.role === "assistant" ? "model" : "user",
+                parts: [{ text: m.content }],
+            }))
+            : [];
 
         const lastMessage = messages[messages.length - 1].content;
 
@@ -53,7 +57,8 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ content: text });
     } catch (error: any) {
-        console.error("API Error:", error);
+        console.error("Critical API Error Details:", error);
+        console.error("Stack Trace:", error.stack);
 
         // Check for 429
         if (error?.status === 429 || error?.message?.includes('429')) {
