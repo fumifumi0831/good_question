@@ -27,14 +27,15 @@ describe('AI Role Format Verification', () => {
 
     describe('Reviewer Role', () => {
         it('should correctly parse the evaluation report JSON', () => {
-            const sampleResponse = "```json\n{\n  \"scores\": { \"structure\": 85, \"empathy\": 60, \"hypothesis\": 70 },\n  \"summaryFeedback\": \"素晴らしい構造化でした。\",\n  \"clips\": [\n    {\n      \"original\": \"なぜ遅いのですか？\",\n      \"better\": \"遅延が発生している背景を伺えますか？\",\n      \"reason\": \"威圧感を減らすため\"\n    }\n  ],\n  \"thinkingHabits\": [\"結論から問う傾向\"]\n}\n```";
+            const sampleResponse = "```json\n{\n  \"scores\": { \"structure\": 85, \"empathy\": 60, \"hypothesis\": 70 },\n  \"summaryFeedback\": \"素晴らしい構造化でした。\",\n  \"clips\": [\n    {\n      \"messageId\": 101,\n      \"original\": \"なぜ遅いのですか？\",\n      \"better\": \"遅延が発生している背景を伺えますか？\",\n      \"reason\": \"威圧感を減らすため\"\n    }\n  ],\n  \"thinkingHabits\": [\"結論から問う傾向\"]\n}\n```";
             const data = extractAndParseJSON<{
                 scores: { structure: number; empathy: number; hypothesis: number };
-                clips: Array<{ original: string; better: string; reason: string }>;
+                clips: Array<{ messageId: number; original: string; better: string; reason: string }>;
                 thinkingHabits: string[];
             }>(sampleResponse);
 
             expect(data?.scores.structure).toBe(85);
+            expect(data?.clips[0].messageId).toBe(101);
             expect(data?.clips[0].better).toContain("背景");
             expect(data?.thinkingHabits).toContain("結論から問う傾向");
         });

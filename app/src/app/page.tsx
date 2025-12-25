@@ -6,7 +6,7 @@ import { getUserStats } from "@/lib/stats-utils";
 import { Send, HelpCircle, ChevronRight, BarChart2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, RadarBar, ResponsiveContainer
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer
 } from 'recharts';
 
 export default function TrainingPage() {
@@ -83,8 +83,8 @@ export default function TrainingPage() {
             reachability: 0,
             timestamp: Date.now(),
           };
-          await db.chatMessages.add(firstMsg);
-          setMessages([firstMsg]);
+          const msgId = await db.chatMessages.add(firstMsg);
+          setMessages([{ ...firstMsg, id: msgId as number }]);
         }
       }
     } catch (e) {
@@ -172,16 +172,20 @@ export default function TrainingPage() {
     };
 
     setMessages((prev) => [...prev, userMsg]);
+    const inputMsg = input;
     setInput("");
     setIsLoading(true);
 
     try {
+      const msgId = await db.chatMessages.add(userMsg);
+      const userMsgWithId = { ...userMsg, id: msgId as number };
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "facilitator",
-          messages: [...messages, userMsg],
+          messages: [...messages, userMsgWithId],
         }),
       });
 
@@ -198,9 +202,13 @@ export default function TrainingPage() {
         reachability: reachability,
         timestamp: Date.now(),
       };
-      setMessages((prev) => [...prev, botMsg]);
-      await db.chatMessages.add(userMsg);
-      await db.chatMessages.add(botMsg);
+      const botMsgId = await db.chatMessages.add(botMsg);
+      const botMsgWithId = { ...botMsg, id: botMsgId as number };
+
+      setMessages((prev) => {
+        const updated = prev.map(m => m.timestamp === userMsg.timestamp ? userMsgWithId : m);
+        return [...updated, botMsgWithId];
+      });
     } catch (e) {
       console.error("Send message error", e);
     } finally {
@@ -213,7 +221,7 @@ export default function TrainingPage() {
   if (evaluationResult) {
     const chartData = [
       { subject: '構造化力', A: evaluationResult.scores.structure, fullMark: 100 },
-      { subject: '共感力', A: evaluationResult.scores.empathy, fullMark: 100 },
+      { subject: '共感・傾聴力', A: evaluationResult.scores.empathy, fullMark: 100 },
       { subject: '仮説検証力', A: evaluationResult.scores.hypothesis, fullMark: 100 },
     ];
 
@@ -253,16 +261,16 @@ export default function TrainingPage() {
           </div>
 
           <section className="space-y-6">
-            <h2 className="text-2xl font-bold font-['Outfit'] flex items-center gap-3">外科手術型添削</h2>
+            <h2 className="text-2xl font-bold font-['Outfit'] flex items-center gap-3">外科手術型添削 (Better Versions)</h2>
             {evaluationResult.clips.map((clip: any, i: number) => (
               <div key={i} className="glass-panel p-8 rounded-[32px] space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-[var(--danger)] uppercase">Original</p>
+                    <p className="text-[10px] font-bold text-[var(--danger)] uppercase">Original (ID: {clip.messageId})</p>
                     <p className="p-4 rounded-xl bg-red-500/5 border border-red-500/10 text-sm italic">"{clip.original}"</p>
                   </div>
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-[var(--success)] uppercase">Better</p>
+                    <p className="text-[10px] font-bold text-[var(--success)] uppercase">Better Version</p>
                     <p className="p-4 rounded-xl bg-green-500/5 border border-green-500/10 text-sm font-bold border-l-4 border-l-[var(--success)]">"{clip.better}"</p>
                   </div>
                 </div>
@@ -271,9 +279,14 @@ export default function TrainingPage() {
             ))}
           </section>
 
-          <div className="flex justify-center">
-            <button onClick={resetSession} className="px-10 py-4 rounded-2xl bg-[var(--primary)] font-bold text-white hover:scale-105 transition-all">もう一度挑戦する</button>
-          </div>
+          <footer className="flex justify-center pt-10">
+            <button
+              onClick={resetSession}
+              className="px-10 py-4 rounded-2xl bg-[var(--primary)] text-white font-bold text-lg hover:scale-105 transition-all shadow-xl shadow-indigo-500/30"
+            >
+              もう一度トレーニングする
+            </button>
+          </footer>
         </motion.div>
       </div>
     );
@@ -331,13 +344,16 @@ export default function TrainingPage() {
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-10 space-y-8">
           {messages.map((m, i) => (
             <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex flex-col max-w-[80%] ${m.role === "user" ? "ml-auto items-end" : "mr-auto"}`}>
-              <span className="text-[10px] font-bold text-[var(--text-dim)] mb-1 uppercase tracking-widest">{m.role === "user" ? "You" : "Client"}</span>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] font-bold text-[var(--text-dim)] uppercase tracking-widest">{m.role === "user" ? "You" : "Client"}</span>
+                {m.id && <span className="text-[8px] text-[var(--text-dim)] opacity-30">#{m.id}</span>}
+              </div>
               <div className={`p-5 rounded-2xl text-[15px] leading-relaxed ${m.role === "user" ? "bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white rounded-br-none" : "bg-[var(--bg-surface)] border border-[var(--border)] rounded-bl-none"}`}>
                 {m.content}
               </div>
             </motion.div>
           ))}
-          {isLoading && session && <div className="flex items-center gap-2 text-[var(--text-dim)] animate-pulse"><div className="w-2 h-2 rounded-full bg-current" /><div className="w-2 h-2 rounded-full bg-current delay-75" /><div className="w-2 h-2 rounded-full bg-current delay-150" /></div>}
+          {isLoading && session && <div className="flex items-center gap-2 text-[var(--text-dim)] animate-pulse ml-4"><div className="w-2 h-2 rounded-full bg-current" /><div className="w-2 h-2 rounded-full bg-current delay-75" /><div className="w-2 h-2 rounded-full bg-current delay-150" /></div>}
         </div>
 
         {session && (
@@ -349,9 +365,9 @@ export default function TrainingPage() {
         )}
 
         <div className="p-10 bg-[var(--bg-deep)] border-t border-[var(--border)]">
-          <div className={`relative flex items-center bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl focus-within:border-[var(--primary)] transition-all ${!session && "opacity-30 pointer-events-none"}`}>
+          <div className={`relative flex items-center bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl focus-within:border-[var(--primary)] transition-all ${(!session || isEvaluating) && "opacity-30 pointer-events-none"}`}>
             <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSendMessage()} placeholder="質問を入力してください..." className="flex-1 bg-transparent border-none p-6 outline-none text-lg" />
-            <button onClick={handleSendMessage} className="p-4 m-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] transition-all"><Send size={24} /></button>
+            <button onClick={handleSendMessage} disabled={isLoading} className="p-4 m-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] transition-all disabled:opacity-50"><Send size={24} /></button>
           </div>
         </div>
 
@@ -362,10 +378,10 @@ export default function TrainingPage() {
               <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-2xl bg-[var(--bg-surface)] border border-[var(--border)] rounded-[32px] p-10 overflow-hidden shadow-2xl">
                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)]" />
                 <h3 className="text-2xl font-bold mb-8">上司の助け舟</h3>
-                <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-4">
-                  {isLoading ? <p className="text-[var(--text-dim)] animate-pulse">考え中...</p> : <div className="whitespace-pre-wrap">{messages[messages.length - 1]?.helpContent || "アドバイスはありません。"}</div>}
+                <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
+                  {isLoading ? <p className="text-[var(--text-dim)] animate-pulse">考え中...</p> : <div className="whitespace-pre-wrap leading-relaxed">{messages[messages.length - 1]?.helpContent || "アドバイスはありません。"}</div>}
                 </div>
-                <div className="mt-10 flex justify-end"><button onClick={() => setIsHelpModalOpen(false)} className="px-8 py-3 rounded-xl bg-[var(--bg-accent)] font-bold">了解</button></div>
+                <div className="mt-10 flex justify-end"><button onClick={() => setIsHelpModalOpen(false)} className="px-8 py-3 rounded-xl bg-[var(--bg-accent)] font-bold border border-[var(--border)] hover:bg-[var(--bg-surface)] transition-all">了解</button></div>
               </motion.div>
             </div>
           )}
