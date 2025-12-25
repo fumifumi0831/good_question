@@ -2,14 +2,16 @@
 
 import { useState, useEffect, useRef } from "react";
 import { db, type GameSession, type ChatMessage, type UserStats } from "@/lib/storage";
-import { getUserStats } from "@/lib/stats-utils";
-import { Send, HelpCircle, ChevronRight, BarChart2 } from "lucide-react";
+import { getUserStats, seedDummyData } from "@/lib/stats-utils";
+import { Send, HelpCircle, ChevronRight, BarChart2, MessageSquare, Trophy, Target, ArrowLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip
 } from 'recharts';
 
 export default function TrainingPage() {
+  const [view, setView] = useState<"training" | "dashboard">("training");
   const [session, setSession] = useState<GameSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -29,7 +31,14 @@ export default function TrainingPage() {
       setUserStats(stats);
     };
     init();
-  }, []);
+  }, [view]);
+
+  // 評価が完了した際に統計を再取得する
+  useEffect(() => {
+    if (evaluationResult) {
+      getUserStats().then(setUserStats);
+    }
+  }, [evaluationResult]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -42,6 +51,7 @@ export default function TrainingPage() {
     setMessages([]);
     setEvaluationResult(null);
     setBotReachability(0);
+    setView("training");
   };
 
   const startNewSession = async () => {
@@ -53,7 +63,10 @@ export default function TrainingPage() {
         body: JSON.stringify({
           mode: "mentor",
           messages: [{ role: "user", content: "トレーニングを開始してください。" }],
-          userStats: userStats,
+          userStats: userStats ? {
+            weakPoints: userStats.weakPoints,
+            averageScore: userStats.averageScore
+          } : null,
         }),
       });
 
@@ -172,7 +185,6 @@ export default function TrainingPage() {
     };
 
     setMessages((prev) => [...prev, userMsg]);
-    const inputMsg = input;
     setInput("");
     setIsLoading(true);
 
@@ -218,6 +230,69 @@ export default function TrainingPage() {
 
   const isHelpActive = messages.length >= 4;
 
+  // --- RENDERING: DASHBOARD ---
+  if (view === "dashboard") {
+    return (
+      <div className="min-h-screen bg-[var(--bg-deep)] text-[var(--text-main)] p-10 flex flex-col items-center overflow-y-auto">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-6xl space-y-10 pb-20">
+          <header className="flex justify-between items-center">
+            <button onClick={() => setView("training")} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--bg-accent)] hover:bg-[var(--border)] transition-all">
+              <ArrowLeft size={20} />
+              <span>トレーニングに戻る</span>
+            </button>
+            <h1 className="text-3xl font-bold font-['Outfit']">My Performance</h1>
+          </header>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="glass-panel p-8 rounded-[32px] flex flex-col items-center justify-center space-y-2">
+              <Trophy size={40} className="text-yellow-500 mb-2" />
+              <p className="text-[var(--text-dim)] text-xs uppercase font-bold tracking-widest">Completed Sessions</p>
+              <p className="text-5xl font-['Outfit'] font-bold">{userStats?.totalSessions || 0}</p>
+            </div>
+            <div className="glass-panel p-8 rounded-[32px] flex flex-col items-center justify-center space-y-2">
+              <BarChart2 size={40} className="text-[var(--primary)] mb-2" />
+              <p className="text-[var(--text-dim)] text-xs uppercase font-bold tracking-widest">Average Score</p>
+              <p className="text-5xl font-['Outfit'] font-bold">{userStats?.averageScore || 0}</p>
+            </div>
+            <div className="glass-panel p-8 rounded-[32px] flex flex-col items-center justify-center space-y-2">
+              <Target size={40} className="text-[var(--secondary)] mb-2" />
+              <p className="text-[var(--text-dim)] text-xs uppercase font-bold tracking-widest">Core Weak Points</p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {userStats?.weakPoints.map(w => (
+                  <span key={w} className="px-3 py-1 rounded-full bg-[var(--secondary)]/10 text-[var(--secondary)] text-xs font-bold border border-[var(--secondary)]/20">
+                    {w}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-panel p-10 rounded-[40px] space-y-6">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <ChevronRight className="text-[var(--primary)]" />
+              Growth Trend
+            </h2>
+            <div className="w-full h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={userStats?.scoreTrend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="var(--text-dim)" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '16px' }}
+                    itemStyle={{ color: 'var(--primary)' }}
+                  />
+                  <Line type="monotone" dataKey="score" stroke="var(--primary)" strokeWidth={4} dot={{ r: 6, fill: 'var(--primary)' }} activeDot={{ r: 8, stroke: 'white' }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // --- RENDERING: EVALUATION REPORT ---
   if (evaluationResult) {
     const chartData = [
       { subject: '構造化力', A: evaluationResult.scores.structure, fullMark: 100 },
@@ -279,12 +354,12 @@ export default function TrainingPage() {
             ))}
           </section>
 
-          <footer className="flex justify-center pt-10">
-            <button
-              onClick={resetSession}
-              className="px-10 py-4 rounded-2xl bg-[var(--primary)] text-white font-bold text-lg hover:scale-105 transition-all shadow-xl shadow-indigo-500/30"
-            >
-              もう一度トレーニングする
+          <footer className="flex justify-center pt-10 gap-4">
+            <button onClick={() => setView("dashboard")} className="px-8 py-4 rounded-2xl bg-[var(--bg-accent)] text-[var(--text-main)] font-bold border border-[var(--border)] hover:bg-[var(--bg-surface)] transition-all">
+              全履歴を見る
+            </button>
+            <button onClick={resetSession} className="px-10 py-4 rounded-2xl bg-[var(--primary)] text-white font-bold text-lg hover:scale-105 transition-all shadow-xl shadow-indigo-500/30">
+              もう一度トレーニング
             </button>
           </footer>
         </motion.div>
@@ -292,16 +367,31 @@ export default function TrainingPage() {
     );
   }
 
+  // --- RENDERING: TRAINING ---
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-deep)] text-[var(--text-main)]">
       <aside className={`w-80 border-r border-[var(--border)] bg-[var(--bg-surface)] p-6 flex flex-col transition-all ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="mb-10">
-          <div className="flex items-center gap-3 text-2xl font-bold text-[var(--primary)]">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)]" />
-            <span className="font-['Outfit']">good_question</span>
+        <div className="mb-10 flex justify-between items-center">
+          <div>
+            <div className="flex items-center gap-3 text-2xl font-bold text-[var(--primary)]">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)]" />
+              <span className="font-['Outfit']">good_question</span>
+            </div>
+            <p className="text-xs text-[var(--text-dim)]">Consultant Training Kit</p>
           </div>
-          <p className="text-xs text-[var(--text-dim)]">Consultant Training Kit</p>
         </div>
+
+        <nav className="space-y-2 mb-10">
+          <button onClick={() => setView("training")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${(view as string) === "training" ? "bg-[var(--primary)]/10 text-[var(--primary)] font-bold" : "hover:bg-[var(--bg-accent)]"}`}>
+            <MessageSquare size={18} />
+            <span>Interview</span>
+          </button>
+          <button onClick={() => setView("dashboard")} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${(view as string) === "dashboard" ? "bg-[var(--primary)]/10 text-[var(--primary)] font-bold" : "hover:bg-[var(--bg-accent)]"}`}>
+            <BarChart2 size={18} />
+            <span>Performance</span>
+          </button>
+        </nav>
+
         {!session ? (
           <div className="flex-1 flex flex-col justify-center">
             <button onClick={startNewSession} disabled={isLoading} className="px-6 py-4 rounded-xl bg-[var(--primary)] text-white font-bold text-lg shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50">

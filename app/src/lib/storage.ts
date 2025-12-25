@@ -25,13 +25,15 @@ export interface ChatMessage {
 export interface UserStats {
     key: 'singleton';
     totalSessions: number;
-    avgScores: {
+    averageScore: number; // 追加
+    avgScores?: { // オプショナル化
         structure: number;
         empathy: number;
         hypothesis: number;
     };
-    knowledgeNotes: string[];
+    knowledgeNotes?: string[];
     weakPoints: string[];
+    scoreTrend: { date: string, score: number }[]; // 追加
     lastUpdated: number;
 }
 
