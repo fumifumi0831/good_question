@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>good_question UI Prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #020617;
+            --bg-surface: #0f172a;
+            --bg-accent: #1e293b;
+            --primary: #6366f1;
+            --primary-hover: #818cf8;
+            --secondary: #a855f7;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --border: #334155;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --glass: rgba(15, 23, 42, 0.8);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+        }
+
+        h1, h2, h3 {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 300px;
+            background-color: var(--bg-surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+        }
+
+        .sidebar-header {
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 8px;
+        }
+
+        .session-info {
+            flex-grow: 1;
+        }
+
+        .info-card {
+            background-color: var(--bg-accent);
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        /* Main Chat Area */
+        .main-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .chat-header {
+            padding: 24px 40px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: rgba(2, 6, 23, 0.5);
+            backdrop-filter: blur(8px);
+        }
+
+        .reachability-container {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .reachability-status {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-dim);
+        }
+
+        .progress-bar-bg {
+            width: 200px;
+            height: 8px;
+            background-color: var(--bg-accent);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 45%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            transition: width 1s ease;
+        }
+
+        .chat-timeline {
+            flex-grow: 1;
+            padding: 40px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .message {
+            max-width: 80%;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.bot {
+            align-self: flex-start;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            align-items: flex-end;
+        }
+
+        .message-content {
+            padding: 16px 20px;
+            border-radius: 16px;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        .bot .message-content {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+        }
+
+        .user .message-content {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+        }
+
+        .message-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-dim);
+        }
+
+        /* Input Area */
+        .input-area {
+            padding: 40px;
+            background-color: var(--bg-deep);
+            border-top: 1px solid var(--border);
+        }
+
+        .input-wrapper {
+            position: relative;
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            transition: border-color 0.2s;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: var(--primary);
+        }
+
+        input {
+            flex-grow: 1;
+            background: transparent;
+            border: none;
+            padding: 20px;
+            color: var(--text-main);
+            font-size: 16px;
+            outline: none;
+        }
+
+        .send-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0 24px;
+            border-radius: 8px;
+            margin: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .send-btn:hover {
+            background-color: var(--primary-hover);
+        }
+
+        /* Floating Help Button */
+        .help-trigger {
+            position: absolute;
+            bottom: 140px;
+            right: 60px;
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--secondary), #ec4899);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 8px 32px rgba(168, 85, 247, 0.4);
+            border: none;
+            z-index: 50;
+        }
+
+        .help-trigger svg {
+            width: 40px;
+            height: 40px;
+            color: white;
+        }
+
+        .pulse {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: var(--secondary);
+            border-radius: 50%;
+            opacity: 0.6;
+            animation: pulse-ring 2s infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(1); opacity: 0.6; }
+            100% { transform: scale(1.6); opacity: 0; }
+        }
+
+        /* Help Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .modal {
+            width: 600px;
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-header {
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .modal-badge {
+            background-color: rgba(168, 85, 247, 0.2);
+            color: var(--secondary);
+            padding: 4px 12px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .help-section {
+            background-color: var(--bg-accent);
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--secondary);
+        }
+
+        .section-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--secondary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .section-text {
+            font-size: 15px;
+            line-height: 1.6;
+            color: var(--text-main);
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 32px;
+        }
+
+        .close-btn {
+            background-color: var(--bg-accent);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* Evaluation View (Hidden by default) */
+        .evaluation-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-deep);
+            display: none;
+            flex-direction: column;
+            padding: 60px;
+            overflow-y: auto;
+            z-index: 200;
+        }
+
+        .eval-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .eval-title {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            background: linear-gradient(to right, #fff, var(--text-dim));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .score-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-bottom: 60px;
+        }
+
+        .score-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 32px;
+            text-align: center;
+        }
+
+        .score-val {
+            font-size: 40px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .score-label {
+            font-size: 14px;
+            color: var(--text-dim);
+            font-weight: 600;
+        }
+
+        .clip-list {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .clip-item {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+        }
+
+        .clip-bad {
+            color: var(--danger);
+            font-style: italic;
+            margin-bottom: 12px;
+            padding-left: 12px;
+            border-left: 3px solid var(--danger);
+        }
+
+        .clip-better {
+            color: var(---success);
+            font-weight: 600;
+            padding-left: 12px;
+            border-left: 3px solid var(--success);
+            background-color: rgba(34, 197, 94, 0.05);
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <div class="logo-icon"></div>
+                <span>good_question</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-dim);">Consultant Training Kit</p>
+        </div>
+
+        <div class="session-info">
+            <h3 style="margin-bottom: 20px;">Session Info</h3>
+            <div class="info-card">
+                <p class="info-label">Industry</p>
+                <p class="info-value">IT / Software</p>
+            </div>
+            <div class="info-card">
+                <p class="info-label">Target Persona</p>
+                <p class="info-value">迷走するDX担当役員</p>
+            </div>
+            <div class="info-card">
+                <p class="info-label">Difficulty</p>
+                <p class="info-value" style="color: var(--secondary);">★★★★☆ Hard</p>
+            </div>
+            <div class="info-card">
+                <p class="info-label">Help Used</p>
+                <p class="info-value">0 / 3</p>
+            </div>
+        </div>
+
+        <button onclick="showEval()" style="margin-top: auto; padding: 16px; background-color: var(--bg-accent); border: 1px solid var(--border); color: white; border-radius: 8px; cursor: pointer;">
+            End Session & Review
+        </button>
+    </aside>
+
+    <main class="main-container">
+        <!-- Help Trigger -->
+        <button class="help-trigger" onclick="openHelp()">
+            <div class="pulse"></div>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </button>
+
+        <header class="chat-header">
+            <div>
+                <h2 style="font-size: 18px;">Interview in Progress</h2>
+            </div>
+            <div class="reachability-container">
+                <span class="reachability-status">真因到達度 (予測): 順調</span>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill"></div>
+                </div>
+            </div>
+        </header>
+
+        <div class="chat-timeline" id="chatTimeline">
+            <div class="message bot">
+                <span class="message-label">CLIENT</span>
+                <div class="message-content">
+                    「うーん、DXと言われてもね。結局何から手を付ければいいのか、現場も私も混乱しているんだよ。システムを入れれば解決するのか、組織を変えないといけないのか、どっちなんだろうね？」
+                </div>
+            </div>
+
+            <div class="message user">
+                <span class="message-label">YOU (CONSULTANT)</span>
+                <div class="message-content">
+                    「現場の皆様が最も混乱されていると感じる部分は、具体的にどの業務プロセスでしょうか？」
+                </div>
+            </div>
+
+            <div class="message bot">
+                <span class="message-label">CLIENT</span>
+                <div class="message-content">
+                    「プロセスというか……そもそも全員、今のやり方に不満はないんだよ。ただ、社長が『デジタルだ』と騒ぐから、仕方がなく動いているというか。そんな状態で予算だけ降りてきても、困るんだよね。」
+                </div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-wrapper">
+                <input type="text" placeholder="質問を入力してください..." id="chatInput">
+                <button class="send-btn" onclick="sendMessage()">SEND</button>
+            </div>
+        </div>
+
+        <!-- Evaluation Overlay -->
+        <div class="evaluation-overlay" id="evalOverlay">
+            <div class="eval-header">
+                <h1 class="eval-title">Evaluation Report</h1>
+                <p style="color: var(--text-dim);">あなたはクライアントの本音の 82% に到達しました</p>
+            </div>
+
+            <div class="score-grid">
+                <div class="score-card">
+                    <p class="score-val">85</p>
+                    <p class="score-label">論理的構造化力</p>
+                </div>
+                <div class="score-card" style="border-color: var(--secondary);">
+                    <p class="score-val" style="color: var(--secondary);">72</p>
+                    <p class="score-label">共感・傾聴力</p>
+                </div>
+                <div class="score-card">
+                    <p class="score-val">90</p>
+                    <p class="score-label">仮説検証プロセス</p>
+                </div>
+            </div>
+
+            <h3 style="margin-bottom: 24px;">上司からのフィードバック (具体的改善案)</h3>
+            <div class="clip-list">
+                <div class="clip-item">
+                    <p class="section-label">Q5 のやり取り</p>
+                    <p class="clip-bad">「具体的にどのシステムが悪いとお考えですか？」</p>
+                    <p style="font-size: 14px; margin-bottom: 12px; color: var(--text-dim);">
+                        → 相手が「混乱」している時に手段（システム）を問うのは、さらに混乱を招く可能性があります。
+                    </p>
+                    <p class="clip-better">「混乱の背景にある、一番の『不安』は何でしょうか？」と、感情に寄り添う問いかけが有効です。</p>
+                </div>
+            </div>
+
+            <button onclick="hideEval()" style="margin-top: 40px; padding: 16px; background-color: var(--primary); border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: 700;">
+                DONE
+            </button>
+        </div>
+    </main>
+
+    <!-- Modal Overlay -->
+    <div class="modal-overlay" id="helpModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">上司の助け舟</div>
+                <span class="modal-badge">Hint</span>
+            </div>
+            
+            <div class="help-section">
+                <p class="section-label">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    現状の整理
+                </p>
+                <div class="section-text">
+                    クライアントは「DXの手段」ではなく、「なぜやるのかという大義（社長の意向との乖離）」に困惑しています。現在の話の流れでは、現場の反発が最大のボトルネックになっていますね。
+                </div>
+            </div>
+
+            <div class="help-section" style="border-left-color: var(--primary);">
+                <p class="section-label" style="color: var(--primary);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    次のアクションへのヒント
+                </p>
+                <div class="section-text">
+                    無理に「課題」を聞き出すのではなく、役員が感じている「社長の期待と現場の現実との板挟みの辛さ」に共感を示し、本音を話しやすい空気を作ってみてはどうでしょうか？
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="close-btn" onclick="closeHelp()">了解しました</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openHelp() {
+            document.getElementById('helpModal').style.display = 'flex';
+        }
+
+        function closeHelp() {
+            document.getElementById('helpModal').style.display = 'none';
+        }
+
+        function showEval() {
+            document.getElementById('evalOverlay').style.display = 'flex';
+        }
+
+        function hideEval() {
+            document.getElementById('evalOverlay').style.display = 'none';
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const timeline = document.getElementById('chatTimeline');
+            if (!input.value) return;
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message user';
+            msgDiv.innerHTML = `
+                <span class="message-label">YOU (CONSULTANT)</span>
+                <div class="message-content">${input.value}</div>
+            `;
+            timeline.appendChild(msgDiv);
+            input.value = '';
+            timeline.scrollTop = timeline.scrollHeight;
+        }
+
+        document.getElementById('chatInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+</html>

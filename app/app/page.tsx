@@ -39,15 +39,15 @@ import {
   ArrowLeft
 } from "lucide-react";
 import {
-  getStoredStats,
+  getInitialStats,
   saveStats,
-  updateStreak,
-  calculateXP,
-  calculateLevel,
-  initialStats,
+  updateStatsAfterSession,
+  saveChatMessage,
+  saveGameSessionFull,
   type UserStats,
-  type GameSession
 } from "@/lib/storage";
+import { Markdown } from "@/components/markdown";
+import { triggerCelebration, triggerSimpleConfetti } from "@/lib/celebration";
 
 export default function GamePage() {
   const [gameState, setGameState] = useState<GameState>("welcome");
@@ -60,27 +60,36 @@ export default function GamePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [questionCount, setQuestionCount] = useState(0);
   const [reachability, setReachability] = useState(0);
-  const [stats, setStats] = useState<UserStats>(initialStats);
+  const [currentSessionId, setCurrentSessionId] = useState<string>("");
+  const [stats, setStats] = useState<UserStats | null>(null);
   const [detailedEval, setDetailedEval] = useState<any>(null);
+  const [rootCauseInput, setRootCauseInput] = useState("");
+  const [goodQuestions, setGoodQuestions] = useState<string>("");
+  const [habits, setHabits] = useState<string>("");
 
   // Initialize stats on mount
   useEffect(() => {
-    setStats(getStoredStats());
+    setStats(getInitialStats());
   }, []);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    scrollToBottom();
+  }, [messages, isLoading]);
 
   const startGame = async () => {
     setIsLoading(true);
     setGameState("training");
     setQuestionCount(0);
     setReachability(0);
+    const newSessionId = Date.now().toString();
+    setCurrentSessionId(newSessionId);
 
     const startMessage = `ゲームを開始してください。\n難易度：${difficulty}\n業界：${industry}\nテーマ：${theme}`;
 
@@ -111,11 +120,21 @@ export default function GamePage() {
     if (!input.trim() || isLoading) return;
 
     const userMessage: Message = { role: "user", content: input };
+    const questionCount = messages.filter((m) => m.role === "user").length;
+    const isSessionEnd = questionCount >= 10;
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
     setQuestionCount(prev => prev + 1);
+
+    // Save to Dexie
+    await saveChatMessage({
+      sessionId: currentSessionId,
+      role: "user",
+      content: input,
+      timestamp: Date.now()
+    });
 
     try {
       const response = await fetch("/api/chat", {
@@ -132,12 +151,16 @@ export default function GamePage() {
         setReachability(parseInt(reachabilityMatch[1]));
       }
 
-      setMessages([...newMessages, { role: "model", content: data.content }]);
+      const assistantMessage: Message = { role: "model", content: data.content };
+      setMessages((prev: Message[]) => [...prev, assistantMessage]);
 
-      // If question count reaches 10, move to evaluation
-      if (questionCount >= 9) {
-        // This will be handled after the model returns the 10th response
-      }
+      await saveChatMessage({
+        sessionId: currentSessionId,
+        role: "assistant",
+        content: data.content,
+        timestamp: Date.now()
+      });
+
     } catch (error) {
       console.error(error);
       setMessages([...newMessages, { role: "system", content: "エラーが発生しました。" }]);
@@ -165,7 +188,9 @@ export default function GamePage() {
         body: JSON.stringify({ messages: newMessages }),
       });
       const data = await response.json();
-      const finalMessages = [...newMessages, { role: "model", content: data.content }];
+      console.log("DEBUG: General Evaluation API Result:", data);
+      const assistantMessage: Message = { role: "model", content: data.content };
+      const finalMessages = [...newMessages, assistantMessage];
       setMessages(finalMessages);
 
       // 2. Trigger Detailed Skill Evaluation (Parallel/Background)
@@ -177,12 +202,13 @@ export default function GamePage() {
         }),
       });
       const detailedData = await detailedResponse.json();
+      console.log("DEBUG: Detailed Evaluation API Result:", detailedData);
 
       // Parse detailed scores
-      const structureScore = parseInt(detailedData.content.match(/\[STRUCTURE_SCORE: (\d+)\]/)?.[1] || "70");
-      const empathyScore = parseInt(detailedData.content.match(/\[EMPATHY_SCORE: (\d+)\]/)?.[1] || "70");
-      const hypothesisScore = parseInt(detailedData.content.match(/\[HYPOTHESIS_SCORE: (\d+)\]/)?.[1] || "70");
-      const score = parseInt(data.content.match(/到達度：(\d+)/)?.[1] || "0");
+      const structureScore = parseInt(detailedData.content.match(/\[STRUCTURE_SCORE: (\d+)\]/)?.[1] || detailedData.content.match(/構造化力[:：]\s*(\d+)/)?.[1] || "70");
+      const empathyScore = parseInt(detailedData.content.match(/\[EMPATHY_SCORE: (\d+)\]/)?.[1] || detailedData.content.match(/共感・傾聴力[:：]\s*(\d+)/)?.[1] || "70");
+      const hypothesisScore = parseInt(detailedData.content.match(/\[HYPOTHESIS_SCORE: (\d+)\]/)?.[1] || detailedData.content.match(/仮説検証力[:：]\s*(\d+)/)?.[1] || "70");
+      const score = parseInt(data.content.match(/到達度：(\d+)/)?.[1] || data.content.match(/到達度[:：]\s*(\d+)/)?.[1] || data.content.match(/(\d+)\s*点/)?.[1] || "0");
 
       setDetailedEval({
         structure: structureScore,
@@ -191,32 +217,56 @@ export default function GamePage() {
       });
 
       // 3. Update Persistence
-      const newSession: GameSession = {
-        id: Date.now().toString(),
-        date: new Date().toISOString(),
-        scenario: `${industry} / ${theme}`,
-        score: score,
-        reachability: reachability,
-        categoryScores: {
-          structure: structureScore,
-          empathy: empathyScore,
-          hypothesis: hypothesisScore
+      const sessionId = currentSessionId || Date.now().toString();
+
+      // Extract good questions and habits for the results view
+      const gq = detailedData.content.match(/\[GOOD_QUESTIONS\]([\s\S]*?)(?=\[HABITS\]|$)/)?.[1] || "";
+      const hb = detailedData.content.match(/\[HABITS\]([\s\S]*?)(?=\n(?:次のステップ|模範解答例|###|#|$))/)?.[1] || (detailedData.content.split("[HABITS]")[1] || "");
+
+      setGoodQuestions(gq.trim());
+      setHabits(hb.trim());
+
+      // Attempt to find a good question and habit from the detailed data for the knowledge note
+      const goodQuestionsPart = gq;
+      const habitPart = hb;
+      const firstGoodQ = goodQuestionsPart.split("\n").find((l: string) => l.trim().startsWith("-"))?.replace("-", "").trim() || "";
+
+      if (stats) {
+        const updatedStats = updateStatsAfterSession(
+          stats,
+          score,
+          { structure: structureScore, empathy: empathyScore, hypothesis: hypothesisScore },
+          `${industry} / ${theme}`,
+          sessionId,
+          firstGoodQ ? {
+            originalQuestion: "セッションのハイライト",
+            goodQuestion: firstGoodQ,
+            thinkingHabit: habitPart.trim()
+          } : undefined
+        );
+        setStats(updatedStats);
+      }
+      // 4. Save to IndexedDB (Dexie)
+      await saveGameSessionFull({
+        id: sessionId,
+        scenario: { industry, theme, difficulty },
+        finalEvaluation: {
+          general: data.content,
+          detailed: detailedData.content,
+          scores: { structure: structureScore, empathy: empathyScore, hypothesis: hypothesisScore, total: score }
         },
-        goodQuestions: detailedData.content.split("[GOOD_QUESTIONS]")[1]?.split("[HABITS]")[0]?.split("\n").filter((l: string) => l.startsWith("-")).map((l: string) => l.replace("-", "").trim()) || [],
-        reflections: detailedData.content.split("[HABITS]")[1]?.trim() || ""
-      };
-
-      const updatedStats = { ...stats };
-      updatedStats.sessions.unshift(newSession);
-      const xpEarned = calculateXP(score, reachability);
-      updatedStats.totalXP += xpEarned;
-      const statsWithStreak = updateStreak(updatedStats);
-      statsWithStreak.level = calculateLevel(statsWithStreak.totalXP);
-
-      setStats(statsWithStreak);
-      saveStats(statsWithStreak);
+        timestamp: Date.now()
+      });
 
       setGameState("result");
+
+      // Celebration!
+      if (score >= 90) {
+        triggerCelebration();
+      } else if (score >= 70) {
+        triggerSimpleConfetti();
+      }
+
     } catch (error) {
       console.error(error);
     } finally {
@@ -231,33 +281,35 @@ export default function GamePage() {
         {/* Header */}
         <header className="mb-8 flex justify-between items-center bg-surface/30 p-4 rounded-2xl border border-slate-800">
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Brain className="w-6 h-6 text-primary" />
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="p-1.5 sm:p-2 bg-primary/10 rounded-lg">
+                <Brain className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
               </div>
-              <h1 className="text-xl font-bold tracking-tight hidden md:block">真因特定トレーニング</h1>
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight hidden xs:block">真因特定トレーニング</h1>
             </div>
 
-            <nav className="flex items-center gap-1 bg-background/50 p-1 rounded-xl border border-slate-800">
+            <nav className="flex items-center gap-0.5 sm:gap-1 bg-background/50 p-1 rounded-xl border border-slate-800">
               <button
                 onClick={() => setView("game")}
                 className={cn(
-                  "px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all",
+                  "px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 transition-all",
                   view === "game" ? "bg-primary text-white shadow-lg" : "text-muted hover:text-foreground"
                 )}
               >
-                <Target className="w-4 h-4" />
-                トレーニング
+                <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">トレーニング</span>
+                <span className="sm:hidden">トレ</span>
               </button>
               <button
                 onClick={() => setView("dashboard")}
                 className={cn(
-                  "px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all",
+                  "px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 transition-all",
                   view === "dashboard" ? "bg-primary text-white shadow-lg" : "text-muted hover:text-foreground"
                 )}
               >
-                <UserIcon className="w-4 h-4" />
-                マイページ
+                <UserIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">マイページ</span>
+                <span className="sm:hidden">マイ</span>
               </button>
             </nav>
           </div>
@@ -265,7 +317,7 @@ export default function GamePage() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 text-orange-500 rounded-full border border-orange-500/20">
               <Flame className="w-4 h-4 fill-current" />
-              <span className="text-sm font-black">{stats.streak}</span>
+              <span className="text-sm font-black">{stats?.currentStreak || 0}</span>
             </div>
             {gameState !== "welcome" && (
               <button
@@ -294,21 +346,21 @@ export default function GamePage() {
                   <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-3">
                     <Star className="w-6 h-6 text-primary fill-primary/20" />
                   </div>
-                  <div className="text-2xl font-black">{stats.level}</div>
+                  <div className="text-2xl font-black">{stats?.level || 1}</div>
                   <div className="text-xs text-muted uppercase tracking-widest">Level</div>
                 </div>
                 <div className="glass p-6 rounded-2xl flex flex-col items-center text-center">
                   <div className="w-12 h-12 bg-orange-500/10 rounded-full flex items-center justify-center mb-3">
                     <Flame className="w-6 h-6 text-orange-500 fill-orange-500/20" />
                   </div>
-                  <div className="text-2xl font-black">{stats.streak} 日</div>
+                  <div className="text-2xl font-black">{stats?.currentStreak || 0} 日</div>
                   <div className="text-xs text-muted uppercase tracking-widest">Streak</div>
                 </div>
                 <div className="glass p-6 rounded-2xl flex flex-col items-center text-center">
                   <div className="w-12 h-12 bg-indigo-500/10 rounded-full flex items-center justify-center mb-3">
                     <Trophy className="w-6 h-6 text-indigo-500 fill-indigo-500/20" />
                   </div>
-                  <div className="text-2xl font-black">{stats.totalXP}</div>
+                  <div className="text-2xl font-black">{stats?.totalXP || 0}</div>
                   <div className="text-xs text-muted uppercase tracking-widest">Total XP</div>
                 </div>
               </div>
@@ -326,8 +378,8 @@ export default function GamePage() {
                       { label: "共感・傾聴力", key: "empathy", color: "bg-green-500" },
                       { label: "仮説検証力", key: "hypothesis", color: "bg-purple-500" },
                     ].map((s) => {
-                      const avg = stats.sessions.length > 0
-                        ? Math.round(stats.sessions.reduce((acc, curr) => acc + (curr.categoryScores?.[s.key as keyof typeof curr.categoryScores] || 0), 0) / stats.sessions.length)
+                      const avg = stats && stats.totalSessions > 0
+                        ? stats.skills[s.key as keyof typeof stats.skills]
                         : 0;
                       return (
                         <div key={s.key} className="space-y-1.5">
@@ -354,8 +406,8 @@ export default function GamePage() {
                     インタビュー攻略ノート概要
                   </h3>
                   <div className="space-y-4 text-sm text-muted">
-                    <p>保存された「良い質問」: {stats.sessions.reduce((acc, s) => acc + (s.goodQuestions?.length || 0), 0)}件</p>
-                    <p>克服すべき思考の癖: {stats.sessions.filter(s => s.reflections).length}件の分析</p>
+                    <p>これまでのトレーニング回数: {stats?.totalSessions || 0}回</p>
+                    <p>自己ベストスコア: {stats?.bestScore || 0}点</p>
                     <button
                       onClick={() => setView("notes")}
                       className="w-full py-3 bg-surface border border-slate-800 rounded-xl hover:bg-slate-800 transition-all font-bold text-foreground flex items-center justify-center gap-2"
@@ -374,12 +426,28 @@ export default function GamePage() {
                   最近のトレーニング履歴
                 </div>
                 <div className="divide-y divide-slate-800">
-                  {stats.sessions.length > 0 ? (
-                    stats.sessions.slice(0, 5).map((s) => (
-                      <div key={s.id} className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
+                  {stats && stats.history.length > 0 ? (
+                    stats.history.slice(0, 10).map((s) => (
+                      <div
+                        key={s.id}
+                        onClick={async () => {
+                          const full = await import("@/lib/storage").then(m => m.getGameSessionFull(s.id));
+                          if (full) {
+                            // Extract scores and data to show in result view
+                            setDetailedEval(full.finalEvaluation.scores);
+                            setMessages([
+                              { role: "model", content: full.finalEvaluation.general }
+                            ]);
+                            setCurrentSessionId(full.id);
+                            setGameState("result");
+                            setView("game");
+                          }
+                        }}
+                        className="p-4 flex items-center justify-between hover:bg-white/[0.05] transition-colors cursor-pointer active:bg-white/[0.1]"
+                      >
                         <div>
-                          <div className="font-bold text-sm">{s.scenario}</div>
-                          <div className="text-[10px] text-muted">{new Date(s.date).toLocaleDateString()}</div>
+                          <div className="font-bold text-sm">{s.scenarioTitle}</div>
+                          <div className="text-[10px] text-muted">{s.date}</div>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="text-right">
@@ -420,13 +488,15 @@ export default function GamePage() {
                 <div className="space-y-4">
                   <h3 className="font-bold text-success flex items-center gap-2">
                     <Star className="w-5 h-5" />
-                    あなたの「必殺質問」集
+                    記録された「良い質問」
                   </h3>
                   <div className="space-y-3">
-                    {stats.sessions.flatMap(s => s.goodQuestions).length > 0 ? (
-                      stats.sessions.flatMap(s => s.goodQuestions).slice(0, 10).map((q, i) => (
+                    {stats && stats.knowledgeNotes.length > 0 ? (
+                      stats.knowledgeNotes.slice(0, 20).map((note, i) => (
                         <div key={i} className="glass p-4 rounded-xl text-sm border-l-2 border-success">
-                          {q}
+                          <div className="text-[10px] uppercase font-bold text-muted mb-1">{note.date}</div>
+                          <div className="font-bold text-primary mb-1">Q: {note.originalQuestion}</div>
+                          <div className="text-slate-300">A: {note.goodQuestion}</div>
                         </div>
                       ))
                     ) : (
@@ -441,11 +511,11 @@ export default function GamePage() {
                     克服すべき思考の癖
                   </h3>
                   <div className="space-y-3">
-                    {stats.sessions.filter(s => s.reflections).length > 0 ? (
-                      stats.sessions.filter(s => s.reflections).slice(0, 5).map((s, i) => (
-                        <div key={i} className="glass p-4 rounded-xl text-sm border-l-2 border-warning whitespace-pre-wrap">
-                          <div className="text-[10px] uppercase font-bold text-muted mb-1">{s.scenario}</div>
-                          {s.reflections}
+                    {stats && stats.knowledgeNotes.length > 0 ? (
+                      stats.knowledgeNotes.filter(n => n.thinkingHabit).slice(0, 10).map((note, i) => (
+                        <div key={i} className="glass p-4 rounded-xl text-sm border-l-2 border-warning">
+                          <div className="text-[10px] uppercase font-bold text-muted mb-1">{note.date}</div>
+                          <Markdown content={note.thinkingHabit} />
                         </div>
                       ))
                     ) : (
@@ -467,9 +537,9 @@ export default function GamePage() {
                   exit={{ opacity: 0, y: -20 }}
                   className="glass p-8 rounded-2xl space-y-8"
                 >
-                  <div className="space-y-2">
-                    <h2 className="text-3xl font-bold">あなたの質問力を、実戦形式で。</h2>
-                    <p className="text-muted">ITコンサルタント向けの真因特定トレーニングゲームです。クライアントの本質的な課題を見つけ出してください。</p>
+                  <div className="space-y-3 sm:space-y-4">
+                    <h2 className="text-2xl sm:text-3xl font-bold leading-tight">あなたの質問力を、<br className="xs:hidden" />実戦形式で。</h2>
+                    <p className="text-sm sm:text-base text-muted">ITコンサルタント向けの真因特定トレーニング。クライアントの本質的な課題を見つけ出してください。</p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -532,7 +602,7 @@ export default function GamePage() {
                   <div className="flex items-center gap-4 mb-4 bg-surface/50 p-4 rounded-xl border border-slate-800">
                     <div className="flex-1 space-y-1">
                       <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted">
-                        <span>質問回数: {questionCount}/10</span>
+                        <span>質問回数: {questionCount}</span>
                         <span>到達度: {reachability}%</span>
                       </div>
                       <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
@@ -543,12 +613,17 @@ export default function GamePage() {
                         />
                       </div>
                     </div>
-                    {questionCount >= 10 && !isLoading && (
+                    {questionCount >= 1 && !isLoading && (
                       <button
                         onClick={goToEvaluation}
-                        className="bg-success text-white px-4 py-2 rounded-lg text-sm font-bold animate-pulse hover:scale-105 transition-transform"
+                        className={cn(
+                          "px-4 py-2 rounded-lg text-sm font-bold transition-all",
+                          questionCount >= 10
+                            ? "bg-success text-white animate-pulse"
+                            : "bg-slate-800 text-muted hover:bg-slate-700 hover:text-foreground"
+                        )}
                       >
-                        真因特定へ進む
+                        {questionCount >= 10 ? "真因特定へ進む" : "特定できた(早期終了)"}
                       </button>
                     )}
                   </div>
@@ -570,14 +645,18 @@ export default function GamePage() {
                           </div>
                         )}
                         <div className={cn(
-                          "max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap",
+                          "max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed",
                           m.role === "user"
-                            ? "bg-primary/20 border border-primary/20 text-indigo-50 rounded-tr-none"
+                            ? "bg-primary/20 border border-primary/20 text-indigo-50 rounded-tr-none whitespace-pre-wrap"
                             : m.role === "system"
                               ? "bg-danger/10 border border-danger/20 text-danger w-full text-center italic"
                               : "bg-surface border border-slate-800 text-slate-200 rounded-tl-none"
                         )}>
-                          {m.content}
+                          {m.role === "model" ? (
+                            <Markdown content={m.content} />
+                          ) : (
+                            m.content
+                          )}
                         </div>
                       </div>
                     ))}
@@ -595,28 +674,31 @@ export default function GamePage() {
                         </div>
                       </div>
                     )}
+                    <div ref={messagesEndRef} />
                   </div>
 
                   {/* Input Area */}
                   <div className="mt-4 relative group">
-                    <input
+                    <textarea
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                          e.preventDefault();
                           handleSend();
                         }
                       }}
-                      placeholder={questionCount < 10 ? "クライアントへの質問を入力してください..." : "これ以上質問はできません。結果を確認してください。"}
+                      placeholder={questionCount < 10 ? "質問を入力..." : "結果を確認してください"}
                       disabled={isLoading || questionCount >= 10}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-full py-4 pl-6 pr-16 outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all text-sm group-hover:border-slate-700"
+                      rows={1}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-2 pl-4 pr-12 outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all text-sm group-hover:border-slate-700 resize-none min-h-[38px] max-h-32 leading-relaxed"
                     />
                     <button
                       onClick={handleSend}
                       disabled={isLoading || !input.trim() || questionCount >= 10}
-                      className="absolute right-2 top-1.5 p-2.5 bg-primary text-white rounded-full hover:bg-primary/90 disabled:opacity-50 disabled:bg-slate-800 transition-all"
+                      className="absolute right-2 bottom-1.5 p-1.5 bg-primary text-white rounded-full hover:bg-primary/90 disabled:opacity-50 disabled:bg-slate-800 transition-all"
                     >
-                      <Send className="w-5 h-5" />
+                      <Send className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </motion.section>
@@ -651,7 +733,7 @@ export default function GamePage() {
                               body: JSON.stringify({ messages: [...messages, { role: "user", content: draftPrompt }] }),
                             });
                             const data = await response.json();
-                            (document.getElementById("rootCause") as HTMLTextAreaElement).value = data.content;
+                            setRootCauseInput(data.content);
                             setIsLoading(false);
                           }}
                           className="text-xs bg-primary/20 text-primary px-3 py-1 rounded-full hover:bg-primary/30 transition-colors flex items-center gap-1"
@@ -661,20 +743,19 @@ export default function GamePage() {
                         </button>
                       </div>
                       <textarea
-                        id="rootCause"
+                        value={rootCauseInput}
+                        onChange={(e) => setRootCauseInput(e.target.value)}
                         rows={8}
                         className="w-full bg-surface border border-slate-800 rounded-lg p-4 outline-none focus:border-primary text-sm leading-relaxed"
                         placeholder="例：現場の属人化による標準プロセスの欠如。そのため、まずはプロセスの可視化と標準化が必要です。"
                       />
-                      <p className="text-[10px] text-muted italic">※「真因」「理由」「アプローチ」を含めて自由に記述してください。</p>
                     </div>
                   </div>
 
                   <button
                     onClick={() => {
-                      const content = (document.getElementById("rootCause") as HTMLTextAreaElement).value;
                       submitEvaluation({
-                        rootCause: content,
+                        rootCause: rootCauseInput,
                         reason: "上記に含む",
                         approach: "上記に含む"
                       });
@@ -705,7 +786,11 @@ export default function GamePage() {
                       >
                         <div className="text-center">
                           <span className="block text-3xl font-black text-primary">
-                            {messages[messages.length - 1].content.match(/到達度：(\d+)/)?.[1] || "???"}
+                            {(() => {
+                              const lastMsg = messages[messages.length - 1]?.content || "";
+                              const match = lastMsg.match(/到達度[:：]\s*(\d+)/) || lastMsg.match(/(\d+)\s*点/);
+                              return match ? match[1] : "0";
+                            })()}
                           </span>
                           <span className="text-[10px] font-bold text-muted uppercase tracking-widest">Score</span>
                         </div>
@@ -713,11 +798,11 @@ export default function GamePage() {
                       <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        delay={0.5}
+                        transition={{ delay: 0.5 }}
                         className="absolute -right-4 -top-2 bg-amber-500 text-slate-950 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 shadow-lg shadow-amber-500/20"
                       >
                         <Trophy className="w-3 h-3" />
-                        {parseInt(messages[messages.length - 1].content.match(/到達度：(\d+)/)?.[1] || "0") >= 80 ? "EXCELLENT" : "FINISHED"}
+                        {parseInt(messages[messages.length - 1]?.content.match(/到達度[:：]\s*(\d+)/)?.[1] || "0") >= 80 ? "EXCELLENT" : "FINISHED"}
                       </motion.div>
                     </div>
                     <div className="space-y-1">
@@ -733,27 +818,101 @@ export default function GamePage() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Strength Card */}
-                    <div className="glass p-6 rounded-2xl border-l-4 border-l-success">
-                      <div className="flex items-center gap-2 mb-3 text-success">
-                        <CheckCircle2 className="w-5 h-5" />
-                        <h3 className="font-bold">あなたの強み</h3>
-                      </div>
-                      <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
-                        {messages[messages.length - 1].content.split("あなたの強み")[1]?.split("改善ポイント")[0]?.replace(/━+/g, "").trim() || "分析中..."}
-                      </div>
-                    </div>
+                    {(() => {
+                      const content = messages[messages.length - 1]?.content || "";
+                      const normalizedContent = content.replace(/━+/g, "").replace(/■ /g, "### ");
 
-                    {/* Improvement Card */}
-                    <div className="glass p-6 rounded-2xl border-l-4 border-l-warning">
-                      <div className="flex items-center gap-2 mb-3 text-warning">
-                        <AlertCircle className="w-5 h-5" />
-                        <h3 className="font-bold">改善ポイント</h3>
-                      </div>
-                      <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
-                        {messages[messages.length - 1].content.split("改善ポイント")[1]?.split("模範解答例")[0]?.replace(/━+/g, "").trim() || "分析中..."}
-                      </div>
-                    </div>
+                      const extractRobust = (text: string, keys: string[]) => {
+                        // Determine the 'tag' type based on the keys provided
+                        let tag: "strengths" | "improvements" | null = null;
+                        if (keys.some(key => ["あなたの強み", "強み", "良かった点", "Good Points"].includes(key))) {
+                          tag = "strengths";
+                        } else if (keys.some(key => ["改善ポイント", "改善点", "アドバイス", "Improvement"].includes(key))) {
+                          tag = "improvements";
+                        }
+
+                        // Try new standardized tags first
+                        if (tag) {
+                          const tagPattern = tag === "strengths" ? /\[STRENGTHS\]/i : /\[IMPROVEMENTS\]/i;
+                          const sections = text.split(tagPattern);
+                          if (sections.length > 1) {
+                            const part = sections[1].split(/\[(?:STRENGTHS|IMPROVEMENTS|HABITS|GOOD_QUESTIONS|INFO|判定|到達度|あなたの分析|真因の詳細解説)\]/i)[0];
+                            if (part.trim()) return part.trim();
+                          }
+                        }
+
+                        // Fallback to traditional headings with lookahead
+                        for (const key of keys) {
+                          const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                          // Improved lookahead: Stop at any newline that starts a new section or common concluding phrase
+                          const regex = new RegExp(`${escapedKey}[:：\\s]*\\n?([\\s\\S]*?)(?=\\n(?:#{1,3}|■|次のステップ|模範解答例|改善ポイント|あなたの強み|強み|判定[:：]|$))`, 'i');
+                          const match = text.match(regex);
+                          if (match && match[1].trim()) return match[1].trim();
+                        }
+                        return null;
+                      };
+
+                      return (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="glass p-5 rounded-2xl border-l-4 border-l-success flex flex-col min-h-[200px]">
+                              <div className="flex items-center gap-2 mb-3 text-success">
+                                <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                                <h3 className="font-bold text-sm">良かった質問</h3>
+                              </div>
+                              <div className="flex-1 overflow-auto text-sm">
+                                <Markdown content={goodQuestions || "分析結果が見つかりませんでした。"} />
+                              </div>
+                            </div>
+
+                            <div className="glass p-5 rounded-2xl border-l-4 border-l-warning flex flex-col min-h-[200px]">
+                              <div className="flex items-center gap-2 mb-3 text-warning">
+                                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                                <h3 className="font-bold text-sm">克服すべき思考の癖</h3>
+                              </div>
+                              <div className="flex-1 overflow-auto text-sm">
+                                <Markdown content={habits || "分析結果が見つかりませんでした。"} />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Debug Fallback */}
+                          {(!goodQuestions || !habits) && (
+                            <details className="glass p-4 rounded-xl border border-slate-800 group">
+                              <summary className="text-xs text-muted cursor-pointer hover:text-foreground transition-colors list-none flex items-center gap-2">
+                                <Info className="w-3 h-3" />
+                                AIの解析結果が見つからない場合（クリックで原文表示）
+                              </summary>
+                              <div className="mt-4 p-4 bg-black/30 rounded-lg text-[10px] font-mono whitespace-pre-wrap overflow-x-auto text-muted-foreground border border-slate-800">
+                                {content}
+                              </div>
+                              <details className="mt-8 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+                                <summary className="text-xs font-medium text-muted cursor-pointer hover:text-slate-300 transition-colors">
+                                  AIの解析結果が見つからない場合（デバッグ用原文）
+                                </summary>
+                                <div className="mt-4 space-y-4">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[10px] text-muted uppercase">Raw Response</span>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(JSON.stringify(messages[messages.length - 1]?.content, null, 2));
+                                        alert("Copied to clipboard!");
+                                      }}
+                                      className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded hover:bg-primary/30"
+                                    >
+                                      Copy Content
+                                    </button>
+                                  </div>
+                                  <pre className="text-[10px] text-slate-400 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-96">
+                                    {messages[messages.length - 1]?.content || "No message content found."}
+                                  </pre>
+                                </div>
+                              </details>
+                            </details>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex flex-col md:flex-row gap-4 pt-4">
@@ -777,7 +936,7 @@ export default function GamePage() {
             </div>
           )}
         </AnimatePresence>
-      </div>
-    </main>
+      </div >
+    </main >
   );
 }

@@ -35,25 +35,25 @@ export async function POST(req: NextRequest) {
         if (lastMessage.content.includes("詳細なスキル評価を行ってください")) {
             const evaluationPrompt = `
 あなたは超一流の戦略コンサルタント兼コーチです。これまでの会話履歴を分析し、以下の形式で厳格に評価してください。
+出力は「指定された形式のみ」とし、前置きや「次のステップ」「模範解答」などの追加情報は一切含めないでください。
 
 ## 評価指標（各100点満点）
-1. 構造化力 (Structure): 情報を整理し、論理的に深掘りできているか
-2. 共感・傾聴力 (Empathy): クライアントの悩みやコンテクストを汲み取れているか
-3. 仮説検証力 (Hypothesis): 当たりをつけ、効率的に真因に迫れているか
+1. 構造化力 (Structure)
+2. 共感・傾聴力 (Empathy)
+3. 仮説検証力 (Hypothesis)
 
 ## 抽出
-- 良い質問 (Good Questions): 今回のセッションで特に鋭かった質問を2-3個
-- 思考の癖 (Habits): 改善すべき思考のパターン
+- 良い質問 (Good Questions): 今回のセッションで特に鋭かった質問を2-3個（箇条書き）
+- 思考の癖 (Habits): 今回のセッションで特に改善すべき、または意識すべき思考のパターン（150文字程度）
 
-## 出力形式
-必ず以下のキーワードを含めて出力してください：
+## 出力形式（厳守）
 [STRUCTURE_SCORE: 数値]
 [EMPATHY_SCORE: 数値]
 [HYPOTHESIS_SCORE: 数値]
 [GOOD_QUESTIONS]
 - 質問内容
 [HABITS]
-- 改善点
+(ここに思考の癖の内容を記述)
             `;
             const evalResult = await chat.sendMessage(evaluationPrompt);
             const evalText = (await evalResult.response).text();
