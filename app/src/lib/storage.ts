@@ -1,4 +1,4 @@
-import { createClient } from './supabase/server'
+import { createClient } from './supabase/client'
 
 // ========================================
 // 型定義
@@ -49,14 +49,14 @@ export interface UserStats {
 }
 
 // ========================================
-// Supabase CRUD 操作
+// Supabase CRUD 操作（クライアント側）
 // ========================================
 
 export const db = {
     // Game Sessions
     gameSessions: {
         async add(session: GameSession): Promise<number> {
-            const supabase = await createClient()
+            const supabase = createClient()
             const { data: { user } } = await supabase.auth.getUser()
 
             if (!user) throw new Error('User not authenticated')
@@ -80,7 +80,7 @@ export const db = {
         },
 
         async update(id: number, updates: Partial<GameSession>): Promise<void> {
-            const supabase = await createClient()
+            const supabase = createClient()
 
             const { error } = await supabase
                 .from('game_sessions')
@@ -95,7 +95,7 @@ export const db = {
         },
 
         async toArray(): Promise<GameSession[]> {
-            const supabase = await createClient()
+            const supabase = createClient()
             const { data: { user } } = await supabase.auth.getUser()
 
             if (!user) return []
@@ -124,7 +124,7 @@ export const db = {
     // Chat Messages
     chatMessages: {
         async add(message: ChatMessage): Promise<number> {
-            const supabase = await createClient()
+            const supabase = createClient()
 
             const { data, error } = await supabase
                 .from('chat_messages')
@@ -146,7 +146,7 @@ export const db = {
         where(field: string) {
             return {
                 async equals(value: any): Promise<ChatMessage[]> {
-                    const supabase = await createClient()
+                    const supabase = createClient()
 
                     const { data, error } = await supabase
                         .from('chat_messages')
@@ -174,7 +174,7 @@ export const db = {
     // User Stats
     userStats: {
         async get(key: 'singleton'): Promise<UserStats | undefined> {
-            const supabase = await createClient()
+            const supabase = createClient()
             const { data: { user } } = await supabase.auth.getUser()
 
             if (!user) return undefined
@@ -201,7 +201,7 @@ export const db = {
         },
 
         async put(stats: UserStats): Promise<void> {
-            const supabase = await createClient()
+            const supabase = createClient()
             const { data: { user } } = await supabase.auth.getUser()
 
             if (!user) throw new Error('User not authenticated')
