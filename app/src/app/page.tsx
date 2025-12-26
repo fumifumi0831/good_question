@@ -26,6 +26,7 @@ export default function TrainingPage() {
   const [evaluationResult, setEvaluationResult] = useState<any>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [isComposing, setIsComposing] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -206,7 +207,7 @@ export default function TrainingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "facilitator",
-          messages: [...messages, userMsgWithId],
+          messages: [...messages, userMsg],
         }),
       });
 
@@ -472,8 +473,10 @@ export default function TrainingPage() {
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey && !isComposing) {
                   e.preventDefault();
                   if (input.trim()) {
                     handleSendMessage();
