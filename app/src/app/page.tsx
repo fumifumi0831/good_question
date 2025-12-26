@@ -9,6 +9,8 @@ import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip
 } from 'recharts';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function TrainingPage() {
   const [view, setView] = useState<"training" | "dashboard">("training");
@@ -473,7 +475,9 @@ export default function TrainingPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSendMessage();
+                  if (input.trim()) {
+                    handleSendMessage();
+                  }
                 }
               }}
               placeholder="質問を入力してください... (Shift+Enterで改行)"
@@ -494,7 +498,23 @@ export default function TrainingPage() {
                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)]" />
                 <h3 className="text-2xl font-bold mb-8">上司の助け舟</h3>
                 <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
-                  {isLoading ? <p className="text-[var(--text-dim)] animate-pulse">考え中...</p> : <div className="whitespace-pre-wrap leading-relaxed">{messages[messages.length - 1]?.helpContent || "アドバイスはありません。"}</div>}
+                  {isLoading ? (
+                    <p className="text-[var(--text-dim)] animate-pulse">考え中...</p>
+                  ) : (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ node, ...props }) => <p className="mb-4" {...props} />,
+                        ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-4 space-y-2" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-4 space-y-2" {...props} />,
+                        li: ({ node, ...props }) => <li className="ml-4" {...props} />,
+                        strong: ({ node, ...props }) => <strong className="font-bold text-[var(--primary)]" {...props} />,
+                        code: ({ node, ...props }) => <code className="bg-[var(--bg-accent)] px-2 py-1 rounded text-sm" {...props} />,
+                      }}
+                    >
+                      {messages[messages.length - 1]?.helpContent || "アドバイスはありません。"}
+                    </ReactMarkdown>
+                  )}
                 </div>
                 <div className="mt-10 flex justify-end"><button onClick={() => setIsHelpModalOpen(false)} className="px-8 py-3 rounded-xl bg-[var(--bg-accent)] font-bold border border-[var(--border)] hover:bg-[var(--bg-surface)] transition-all">了解</button></div>
               </motion.div>
