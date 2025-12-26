@@ -407,8 +407,8 @@ export default function TrainingPage() {
         </nav>
 
         {!session ? (
-          <div className="flex-1 flex flex-col justify-center">
-            <button onClick={startNewSession} disabled={isLoading} className="px-6 py-4 rounded-xl bg-[var(--primary)] text-white font-bold text-lg shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50">
+          <div className="flex-1 flex flex-col justify-center items-center">
+            <button onClick={startNewSession} disabled={isLoading} className="px-6 py-4 rounded-xl bg-[var(--primary)] text-white font-bold text-lg shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50 hover:scale-105">
               {isLoading ? "ガチャを回しています..." : "トレーニングを開始"}
             </button>
           </div>
