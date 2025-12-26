@@ -38,12 +38,17 @@ export async function POST(req: Request) {
         });
 
         // Calculate history (messages except the last one)
-        const history = (messages && messages.length > 1)
+        let history = (messages && messages.length > 1)
             ? messages.slice(0, -1).map((m: any) => ({
                 role: m.role === "assistant" ? "model" : "user",
                 parts: [{ text: m.content }],
             }))
             : [];
+
+        // Gemini requires history to start with 'user', not 'model'
+        if (history.length > 0 && history[0].role === "model") {
+            history = history.slice(1);
+        }
 
         const lastMessage = messages[messages.length - 1].content;
 

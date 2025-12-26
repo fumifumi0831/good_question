@@ -210,7 +210,8 @@ export default function TrainingPage() {
 
       const data = await res.json();
       if (!data.content) {
-        throw new Error(data.error || "AIからの応答が空でした。");
+        const errorMsg = data.details ? `${data.error} (${data.details})` : (data.error || "AIからの応答が空でした。");
+        throw new Error(errorMsg);
       }
       const reachabilityMatch = data.content.match(/真因到達度：(\d+)%/);
       const reachability = reachabilityMatch ? parseInt(reachabilityMatch[1], 10) : botReachability;
