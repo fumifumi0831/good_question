@@ -109,6 +109,7 @@ export default function TrainingPage() {
                         helpCount: 0,
                         timestamp: Date.now(),
                     };
+
                     const id = await db.gameSessions.add(newSession);
                     const activeSession = { ...newSession, id };
                     setSession(activeSession);
@@ -121,6 +122,7 @@ export default function TrainingPage() {
                         reachability: 0,
                         timestamp: Date.now(),
                     };
+
                     const msgId = await db.chatMessages.add(firstMsg);
                     setMessages([{ ...firstMsg, id: msgId as number }]);
                 }
@@ -397,6 +399,11 @@ export default function TrainingPage() {
     }
 
     // --- RENDERING: TRAINING ---
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        router.push('/');
+    };
+
     return (
         <div className="flex h-screen overflow-hidden bg-[var(--bg-deep)] text-[var(--text-main)]">
             <aside className={`w-80 border-r border-[var(--border)] bg-[var(--bg-surface)] p-6 flex flex-col transition-all ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
@@ -440,6 +447,21 @@ export default function TrainingPage() {
                         </div>
                     </div>
                 )}
+
+                {/* ログアウトボタン */}
+                <div className="mt-auto pt-6 border-t border-[var(--border)]">
+                    <button
+                        onClick={handleLogout}
+                        className="w-full px-4 py-3 rounded-xl bg-[var(--bg-accent)] border border-[var(--border)] text-[var(--text-dim)] hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-500 transition-all flex items-center justify-center gap-2 font-semibold"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                        <span>ログアウト</span>
+                    </button>
+                </div>
             </aside>
 
             <main className="flex-1 flex flex-col relative">
